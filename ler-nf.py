@@ -7,34 +7,38 @@ with open("./nf2.html", "r", encoding="ISO-8859-1") as file:
 
 # Encontrar a tabela de produtos
 prod_table = soup.find("div", {"id": "prod"}).find("table")
+children = list(prod_table.children)
 
-# Lista para armazenar os produtos
-produtos = []
+produto = ""
+preco_unitario = 0.0
+desconto = 0.0
+qtd_prod = 0.0
+for x in range(len(children)):
+    if not children[x].name: continue
 
-# Encontrar todas as linhas que contêm produtos
-rows = prod_table.find_all("tr")[2:]  # Ignorar cabeçalhos
+    # se for uma tr detalhe de produto
+    if children[x].find("div") and children[x].find("div")["id"].startswith("prod"): 
+        
+        preco_desconto_str = children[x].find("div").find_all("tr")[2].find("input", {"name": "edtCodProd"})["value"]
+        if preco_desconto_str.strip(): 
+            desconto = float(preco_desconto_str.replace(".", "").replace(",", "."))
 
-for row in rows:
-    inputs = row.find_all("input")
+        preco_unitario_str = children[x].find("div").find_all("tr")[3].find("input", {"name": "edtvlUniCom"})["value"]
+        if preco_unitario_str.strip(): 
+            preco_unitario = float(preco_unitario_str.replace(".", "").replace(",", "."))
 
-    # Garantir que a linha tem campos necessários
-    if len(inputs) >= 3:
-        nome = inputs[1]["value"]
-        quantidade = inputs[2]["value"]
-        valor_unitario = inputs[-1]["value"]  # Último input na linha principal
-
-        # Converter valores para os formatos corretos
-        quantidade = quantidade#float(quantidade.replace(",", "."))
-        valor_unitario = valor_unitario#float(valor_unitario.replace(",", "."))
-
-        produtos.append({
-            "nome": nome,
-            "quantidade": quantidade,
-            "valor_unitario": valor_unitario
-        })
-
-# Converter para JSON
-json_result = json.dumps(produtos, indent=4, ensure_ascii=False)
-
-# Exibir o resultado
-print(json_result)
+    else:
+        inputs = children[x].find("input", {"name":"edtDescProd"})
+        if inputs: 
+            produto = inputs['value']
+            # print("produto:", produto, end=" ")
+        qtd_prod_str = children[x].find("input", {"name":"edtQtdProd"})
+        if qtd_prod_str and qtd_prod_str['value'].strip(): 
+            qtd_prod = float(qtd_prod_str['value'].replace(".", "").replace(",", "."))
+    if preco_unitario > 0.0:
+        print(f"{qtd_prod}x ({produto})", end=" ")
+        print("por", preco_unitario - (desconto/qtd_prod))
+    
+    preco_unitario = 0.0
+    desconto = 0.0
+    
