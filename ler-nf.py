@@ -59,6 +59,33 @@ def get_input_value(node, field_name: str) -> str:
     return input_node.get("value", "")
 
 
+def extract_detail_fields(detail_div) -> dict[str, str]:
+    """Extrai pares label/valor da tabela de detalhe de um produto."""
+    if detail_div is None:
+        return {}
+
+    table = detail_div.find("table")
+    if table is None:
+        return {}
+
+    fields: dict[str, str] = {}
+
+    for tr in table.find_all("tr"):
+        for td in tr.find_all("td"):
+            label_node = td.find("b")
+            input_node = td.find("input")
+            if label_node is None or input_node is None:
+                continue
+
+            label = label_node.get_text(" ", strip=True)
+            if not label:
+                continue
+
+            fields[label] = input_node.get("value", "").strip()
+
+    return fields
+
+
 def compute_unit_price(preco_unitario: float, desconto: float, qtd: float) -> float:
     """Calcula preço unitário líquido com proteção para quantidade zero."""
     if qtd <= 0:
@@ -82,31 +109,33 @@ def extract_items(soup: BeautifulSoup) -> List[ItemNF]:
 
     for row in prod_table.find_all("tr", recursive=False):
         detail_div = row.find("div", id=lambda value: bool(value and value.startswith("prod")))
+        if detail_div is None:
+            desc = get_input_value(row, FIELD_DESC)
+            if desc:
+                produto = desc
 
-        if detail_div is not None:
-            desconto = parse_decimal_br(get_input_value(detail_div, FIELD_DESCONTO))
-            preco_unitario = parse_decimal_br(get_input_value(detail_div, FIELD_PRECO_UNIT))
-
-            if preco_unitario > 0.0:
-                preco_liquido = compute_unit_price(preco_unitario, desconto, qtd_prod)
-                items.append(
-                    ItemNF(
-                        descricao=produto,
-                        quantidade=qtd_prod,
-                        preco_unitario=preco_unitario,
-                        desconto=desconto,
-                        preco_unitario_liquido=preco_liquido,
-                    )
-                )
+            qtd = parse_decimal_br(get_input_value(row, FIELD_QTD))
+            if qtd > 0:
+                qtd_prod = qtd
             continue
 
-        desc = get_input_value(row, FIELD_DESC)
-        if desc:
-            produto = desc
+        detail_fields = extract_detail_fields(detail_div)
+        desconto = parse_decimal_br(detail_fields.get("Valor de Desconto", ""))
+        preco_unitario = parse_decimal_br(detail_fields.get("Valor unitário de comercialização", ""))
 
-        qtd = parse_decimal_br(get_input_value(row, FIELD_QTD))
-        if qtd > 0:
-            qtd_prod = qtd
+        if preco_unitario == 0.0:
+            continue
+
+        preco_liquido = compute_unit_price(preco_unitario, desconto, qtd_prod)
+        items.append(
+            ItemNF(
+                descricao=produto,
+                quantidade=qtd_prod,
+                preco_unitario=preco_unitario,
+                desconto=desconto,
+                preco_unitario_liquido=preco_liquido,
+            )
+        )
 
     return items
 
