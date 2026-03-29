@@ -11,11 +11,13 @@ FIELD_DESC = "edtDescProd"
 FIELD_QTD = "edtQtdProd"
 FIELD_DESCONTO = "edtCodProd"
 FIELD_PRECO_UNIT = "edtvlUniCom"
+FIELD_UNIDADE = "edtUnidTrib"
 
 
 @dataclass
 class ItemNF:
     descricao: str
+    unidade: str
     quantidade: float
     preco_unitario: float
     desconto: float
@@ -106,6 +108,7 @@ def extract_items(soup: BeautifulSoup) -> List[ItemNF]:
     items: List[ItemNF] = []
     produto = ""
     qtd_prod = 0.0
+    unidade = ""
 
     for row in prod_table.find_all("tr", recursive=False):
         detail_div = row.find("div", id=lambda value: bool(value and value.startswith("prod")))
@@ -117,6 +120,11 @@ def extract_items(soup: BeautifulSoup) -> List[ItemNF]:
             qtd = parse_decimal_br(get_input_value(row, FIELD_QTD))
             if qtd > 0:
                 qtd_prod = qtd
+            
+            und = get_input_value(row, FIELD_UNIDADE)
+            if und:
+                unidade = und
+
             continue
 
         detail_fields = extract_detail_fields(detail_div)
@@ -130,6 +138,7 @@ def extract_items(soup: BeautifulSoup) -> List[ItemNF]:
         items.append(
             ItemNF(
                 descricao=produto,
+                unidade=unidade,
                 quantidade=qtd_prod,
                 preco_unitario=preco_unitario,
                 desconto=desconto,
@@ -150,7 +159,7 @@ def main() -> int:
         return 1
 
     for item in items:
-        print(f"{item.quantidade}x ({item.descricao}) por {item.preco_unitario_liquido}")
+        print(f"{item.quantidade} {item.unidade} de ({item.descricao}) por {item.preco_unitario_liquido}")
 
     return 0
 
