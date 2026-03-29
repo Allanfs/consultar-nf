@@ -3,6 +3,7 @@ import sys
 from typing import List
 
 from bs4 import BeautifulSoup
+import pandas as pd
 
 DEFAULT_HTML_PATH = "./nf2.html"
 HTML_ENCODING = "ISO-8859-1"
@@ -149,6 +150,62 @@ def extract_items(soup: BeautifulSoup) -> List[ItemNF]:
     return items
 
 
+def group_and_sort_items(items: List[ItemNF]) -> List[ItemNF]:
+    """Agrupa itens por descrição e ordena por nome do produto."""
+    if not items:
+        return []
+
+    columns = [
+        "descricao",
+        "unidade",
+        "quantidade",
+        "preco_unitario",
+        "desconto",
+        "preco_unitario_liquido",
+    ]
+    df = pd.DataFrame([item.__dict__ for item in items], columns=columns)
+
+    numeric_columns = ["quantidade", "preco_unitario", "desconto", "preco_unitario_liquido"]
+    for col in numeric_columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+    df["descricao"] = df["descricao"].fillna("").astype(str)
+    df["unidade"] = df["unidade"].fillna("").astype(str)
+
+    df["preco_unitario_peso"] = df["preco_unitario"] * df["quantidade"]
+    df["preco_liquido_peso"] = df["preco_unitario_liquido"] * df["quantidade"]
+
+    grouped = df.groupby("descricao", as_index=False).agg(
+        unidade=(
+            "unidade",
+            lambda s: next((value for value in s if str(value).strip()), ""),
+        ),
+        quantidade=("quantidade", "sum"),
+        desconto=("desconto", "sum"),
+        preco_unitario_peso=("preco_unitario_peso", "sum"),
+        preco_liquido_peso=("preco_liquido_peso", "sum"),
+    )
+    grouped["preco_unitario"] = grouped["preco_unitario_peso"] / grouped["quantidade"]
+    grouped["preco_unitario_liquido"] = grouped["preco_liquido_peso"] / grouped["quantidade"]
+
+    grouped = grouped.sort_values("descricao")
+
+    result: List[ItemNF] = []
+    for row in grouped.itertuples(index=False):
+        result.append(
+            ItemNF(
+                descricao=row.descricao,
+                unidade=row.unidade,
+                quantidade=float(row.quantidade),
+                preco_unitario=float(row.preco_unitario),
+                desconto=float(row.desconto),
+                preco_unitario_liquido=float(row.preco_unitario_liquido),
+            )
+        )
+
+    return result
+
+
 def main() -> int:
     """Executa parsing do arquivo de NF e imprime os itens encontrados."""
     try:
@@ -158,8 +215,10 @@ def main() -> int:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
 
+    items = group_and_sort_items(items)
+
     for item in items:
-        print(f"{item.quantidade} {item.unidade} de ({item.descricao}) por {item.preco_unitario_liquido}")
+        print(f"{item.quantidade} {item.unidade} de ({item.descricao}) por {item.preco_unitario_liquido:.2f}")
 
     return 0
 
